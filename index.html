@@ -118,9 +118,9 @@
             var Todo = Backbone.Model.extend({
                 schema: todoSchema,
                 //TODO: its a shame that the schema is not in terms of data-type, and that a boolean type would thus have an auto-default (rather than being invalid - ie undefined) - and it seems that this 'default:' isn't even used by the todos.create'
-                default: {
-                    done: false
-                },
+//                default: {
+//                    done: false
+//                },
             });
             var Todos = Backbone.Collection.extend({
                 model: Todo,
