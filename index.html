@@ -1,0 +1,353 @@
+<!doctype html>
+<html lang="en">
+    
+    <head>
+        <meta charset="utf-8">
+        <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+        <title>Backbone-form.js • TodoMVC</title>
+        <link rel="stylesheet" href="base.css">
+        <!--[if IE]>
+            <script src="../../assets/ie.js"></script>
+        <![endif]-->
+    </head>
+    
+    <body>
+        <section id="todoapp">
+            <header id="header">
+                	<h1>todos</h1>
+
+            </header>
+            <section id="main">
+                <input id="toggle-all" type="checkbox">
+                <label for="toggle-all">Mark all as complete</label>
+                <ul id="todo-list"></ul>
+            </section>
+            <footer id="footer"> <span id="todo-count"><strong id="count">0</strong> item<span id=plural>s</span> left</span>
+                <span
+                id="filters">
+                    <input type=radio name=filter value=all id=all checked />
+                    <label for=all>All</label>
+                    <input type=radio name=filter value=active id=active />
+                    <label for=active>Active</label>
+                    <input type=radio name=filter value=completed id=completed
+                    />
+                    <label for=completed>Completed</label>
+                    </span>
+                    <button id="clear-completed">Clear completed (<span id=completedCount>0</span>)</button>
+            </footer>
+        </section>
+        <div id="info">
+            <p>click to edit a todo</p>
+            <p>original by
+                <a href="https://github.com/addyosmani">Addy Osmani</a>
+            </p>
+            <p>Adapted for backbone-forms by
+                <a href="https://github.com/SvenDowideit">Sven Dowideit</a>
+            </p>
+            <p>This example does not (yet?) follow the
+                <a href="https://github.com/addyosmani/todomvc/wiki/App-Specification">spec</a>, instead it tries to leverage backbone-forms</p>
+            <p>from
+                <a href="http://todomvc.com">TodoMVC</a>
+            </p>
+        </div>
+        <script src="backbone/json2.js"></script>
+        <script src="backbone/jquery.js"></script>
+        <script src="backbone/underscore.js"></script>
+        <script src="backbone/backbone.js"></script>
+        <script src="backbone/backbone-localstorage.js"></script>
+        <script src="backbone-forms/backbone-forms.js"></script>
+        <link href="backbone-forms/templates/default.css" rel="stylesheet"
+        />
+        <script src="backbone-forms/editors/list.min.js"></script>
+        <script src="backbone-forms/editors/jquery-ui.js"></script>
+        <link rel="stylesheet" href="backbone-forms/editors/jquery-ui.css"
+        />
+        <script src="backbone-forms/templates/bootstrap.js"></script>
+        <link href="NObackbone-forms/templates/bootstrap.css" rel="stylesheet"
+        />
+        <style>
+            fieldset {
+                border:0;
+                padding:0;
+            }
+            .control-label {
+                display: none !important;
+            }
+            input.edit {
+                border:0;
+                background: rgba(0, 0, 0, 0.02);
+            }
+            #header li.editing {
+                border-bottom: none;
+                padding: 0;
+                list-style: none;
+            }
+            #header .edit {
+                display: block;
+                width: 506px;
+                padding: 13px 17px 12px 17px;
+                margin: 0 0 0 43px;
+            }
+            .hideElement {
+                display: none;
+            }
+            #filters input {
+                -webkit-appearance: none;
+            }
+            #filters input[type="radio"]:checked+label {
+                font-weight: bold;
+            }
+        </style>
+        <script>
+            var todoSchema = {
+                title: {
+                    type: 'Text',
+                    editorClass: 'edit',
+                    editorAttrs: {
+                        placeholder: 'What needs to be done?'
+                    }
+                },
+                done: {
+                    type: 'Checkbox',
+                    editorClass: 'toggle'
+                },
+            };
+            var Todo = Backbone.Model.extend({
+                schema: todoSchema,
+                //TODO: its a shame that the schema is not in terms of data-type, and that a boolean type would thus have an auto-default (rather than being invalid - ie undefined) - and it seems that this 'default:' isn't even used by the todos.create'
+                default: {
+                    done: false
+                },
+            });
+            var Todos = Backbone.Collection.extend({
+                model: Todo,
+                // Save all of the todo items under the `"todos-backbone"` namespace.
+                localStorage: new Backbone.LocalStorage("todos-backbone-forms"),
+                // Filter down the list of all todo items that are finished.
+                done: function () {
+                    return this.filter(function (todo) {
+                        return todo.get('done');
+                    });
+                },
+                // Filter down the list to only todo items that are still not finished.
+                remaining: function () {
+                    return this.without.apply(this, this.done());
+                },
+            });
+            var todos = new Todos();
+            todos.on('change', function (model, name) {
+                //auto-commit to store
+                todos.create(model);
+            });
+
+            Backbone.Form.setTemplates({
+                customForm: '<li class="editing"><form class="custom-form">{{fieldsets}}</form></li>'
+            });
+
+            //params: {model: todo, ...}
+            var makeItemView = function (options) {
+                options = _.extend({
+                    template: 'customForm',
+                    fields: ['done', 'title'],
+                    // looks like this doesn't work - debugging into backbone makes me wonder how it could ever work
+                    //                        events : {'submit' : 'onSubmit'},
+                    onSubmit: function (e) {
+                        //                        console.log('todoView:submit '+e);
+                        this.commit();
+                    },
+                    onChange: function (form, edit) {
+                        //perhaps should only commit if its the 'done' field?
+                        //                        console.log('todoView:onchange');
+                        form.commit();
+                    },
+                    onBlur: function (form, edit) {
+                        //                        console.log('todoView:onblur ');
+                        form.commit();
+                    }
+                }, options);
+                var todoView = new Backbone.Form(options);
+                //TODO: wbnif the function prototype was the same as the inbuilt events..
+                todoView.on('submit', options.onSubmit);
+                todoView.on('blur', options.onBlur);
+                //the change event is needed for the checkboxes
+                todoView.on('change', options.onChange);
+
+                todoView.myrender = function () {
+                    var html = todoView.render().el;
+                    $(html).find('form').data('backboneView', todoView);
+                    return html;
+                }
+                return todoView;
+
+                //var html = todoView.render().el;
+                //$(html).find('form').data('backboneView', todoView);
+                //return html;
+            }
+
+            var TodosView = Backbone.View.extend({
+                views: {},
+                tagName: "li",
+                className: "todo-item",
+                initialize: function () {
+                    _.bindAll(this, 'render');
+                    this.collection.bind('add', this.render);
+                    this.collection.bind('remove', this.render);
+                    this.collection.bind('bulkchange', this.render);
+                    Todo.bind('sync', this.render);
+                    //  updating _all_ views onchange is very slow
+                    //    this.collection.bind('change', this.render);
+                },
+                render: function (model, col, err) {
+                    if (model !== undefined && col !== undefined && col.models !== undefined) {
+                        if (model.id === undefined) {
+                            //add ()
+                            //need to force a serialisation so we get an id
+                            todos.create(model);
+                            this.views[model.id] = makeItemView({
+                                model: model
+                            });
+
+                            var filter = $('input[name=filter]:checked').attr('id');
+                            if (filter !== 'completed') {
+                                $(this.el).append(this.views[model.id].myrender());
+                            }
+                            return;
+                        } else {
+                            //remove
+                            if (!col.get(model.id)) {
+                                delete this.views[model.id];
+                                //separate out removing a view from rendering, so we only render at the end of the 'delete completed' (using bulkchange)  
+                                return;
+                            }
+                        }
+                    }
+
+                    var els = [];
+                    var filter = $('input[name=filter]:checked').attr('id');
+                    this.collection.each(function (todo) {
+                        if ((filter == 'active' && todo.get('done')) || (filter == 'completed' && !todo.get('done'))) {
+
+                        } else {
+                            if (this.views[todo.id] === undefined) {
+                                this.views[todo.id] = makeItemView({
+                                    model: todo
+                                });
+                            }
+                            els.push(this.views[todo.id].myrender());
+                        }
+                    }, this);
+                    //TODO: this is horribly innefficient, we should just insert/delete from html for add/remove
+                    $(this.el).html(els);
+
+                    return this;
+                }
+            });
+            var StatsView = Backbone.View.extend({
+                tagName: "li",
+                className: "todo-item",
+                initialize: function () {
+                    _.bindAll(this, 'render');
+                    this.collection.bind('add', this.render);
+                    this.collection.bind('remove', this.render);
+                    this.collection.bind('change', this.render);
+                    //TODO: again, the events attribute didn't work
+                    $('#clear-completed').click(this.clearCompleted);
+                    $('#toggle-all').click(this.toggleAll);
+                },
+                render: function () {
+                    var els = [];
+                    var done = todos.done().length;
+                    var remaining = todos.remaining().length;
+
+                    $('#todo-count #count').html(remaining);
+                    $('#todo-count #plural').toggleClass('hideElement', 1 == remaining);
+                    $('#clear-completed #completedCount').html(done);
+                    $('#clear-completed').toggleClass('hideElement', done <= 0);
+                    $('#footer').toggleClass('hideElement', done + remaining <= 0);
+                    var filter = $('input[name=filter]:checked').attr('id');
+                    var toggleCount = done + remaining;
+                    var toggleVal = remaining <= 0;
+                    if (filter === 'completed') {
+                        toggleCount = done;
+                        toggleVal = done > 0;
+                    } else if (filter === 'active') {
+                        toggleCount = remaining;
+                        toggleVal = !remaining > 0;
+                    }
+
+                    $('#toggle-all').toggleClass('hideElement', toggleCount <= 0);
+                    $('#toggle-all').prop('checked', toggleVal);
+
+                    return this;
+                },
+                // Clear all done todo items, destroying their models.
+                clearCompleted: function () {
+                    _.invoke(todos.done(), 'destroy');
+                    todos.trigger('bulkchange');
+                    return false;
+                },
+                toggleAll: function () {
+                    var done = $('#toggle-all').is(':checked');
+                    todos.each(function (todo) {
+                        todo.set('done', done);
+                    });
+                    todos.trigger('bulkchange');
+                },
+            });
+
+            //initialise the views
+            todos.fetch();
+            $('#header h1').after(makeItemView({
+                //editorAttrs: { id: 'new-todo', placeholder: 'What needs to be done?', autofocus: '' }
+                schema: todoSchema,
+                fields: ['title'],
+                data: {},
+                onSubmit: function (e) {
+                    //                        console.log('new_todoView:submit '+e);
+                    var title = e.getValue('title');
+                    if (title !== '') {
+                        //create new task and clear..
+                        todos.create({
+                            title: title,
+                            done: false
+                        });
+                        //                          console.log('create "' + title + '".');
+                        e.setValue('title', '');
+                    }
+                },
+                onChange: function (e) { //disable onchange
+                },
+                onBlur: function (e) { //disable onblur
+                },
+            }).myrender());
+            todosView = new TodosView({
+                collection: todos,
+                el: '#todo-list'
+            });
+            todosView.render();
+            statsView = new StatsView({
+                collection: todos,
+                el: '#todo-list'
+            });
+            statsView.render();
+
+            //trigger a re-render if a filter is selected
+            $('#filters').click(function () {
+                todosView.render();
+                statsView.render();
+            });
+
+            //TODO: I'd rather just hook into a submit event in the view.., that way i can use it in the creator form too
+            //pass the form:submit event on to the form view
+            $('form').submit(function (e, el) {
+                var view = $(e.currentTarget).data('backboneView');
+                if (view !== undefined) {
+                    view.trigger('submit', view);
+                    //stifle the commit - should make this configurable in the view options..
+                    return false;
+                }
+            });
+        </script>
+    </body>
+
+</html>
